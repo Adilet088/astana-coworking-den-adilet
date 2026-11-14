@@ -167,4 +167,4 @@ The application provides the following demo accounts for testing different user 
 
 ## Project Goals
 
-The main goal of this project is to simplify workspace reservations in Astana by providing a centralized, user-friendly, and real-time booking platform for students, teachers, and administrators.
+The main goal of this project is to simplify workspace reservations in Astana by providing a centralized, user-friendly, and real-time booking platform for students, teachers, and administrators.  
