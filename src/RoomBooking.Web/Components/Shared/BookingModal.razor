@@ -1,0 +1,117 @@
+@using System.Globalization
+
+@if (Visible)
+{
+    <div class="rb-modal-overlay" @onclick="OnCancel">
+        <div class="rb-modal-dialog" @onclick:stopPropagation>
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <div>
+                    <h5 class="fw-bold m-0 rb-modal-title">Confirm Booking</h5>
+                    <div class="text-primary fw-semibold small mt-1">@SpaceName</div>
+                </div>
+                <button type="button" class="btn-close" aria-label="Close" disabled="@IsBusy" @onclick="OnCancel"></button>
+            </div>
+
+            <div class="rb-booking-time-pill mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span>
+                    @StartUtc.ToLocalTime().ToString("ddd, dd MMM yyyy · HH:mm", CultureInfo.InvariantCulture) – @ComputedEndUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)
+                </span>
+            </div>
+
+            <div class="mb-3">
+                <label for="duration" class="form-label small fw-semibold text-secondary">Duration</label>
+                <select id="duration" class="form-select" @bind="_durationHours" disabled="@IsBusy">
+                    <option value="1">1 hour (until @StartUtc.AddHours(1).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture))</option>
+                    @if (MaxHours >= 2)
+                    {
+                        <option value="2">2 hours (until @StartUtc.AddHours(2).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture))</option>
+                    }
+                    @if (MaxHours >= 3)
+                    {
+                        <option value="3">3 hours (until @StartUtc.AddHours(3).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture))</option>
+                    }
+                    @if (MaxHours >= 4)
+                    {
+                        <option value="4">4 hours (until @StartUtc.AddHours(4).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture))</option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="purpose" class="form-label small fw-semibold text-secondary">Purpose of visit</label>
+                <input id="purpose"
+                       class="form-control"
+                       maxlength="200"
+                       placeholder="e.g., Diploma project work, Team sprint, Lecture..."
+                       @bind="_purpose"
+                       @bind:event="oninput"
+                       disabled="@IsBusy" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(_localError ?? Error))
+            {
+                <div class="auth-alert auth-alert-danger mb-3">@(_localError ?? Error)</div>
+            }
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <button type="button" class="btn btn-light px-3" disabled="@IsBusy" @onclick="OnCancel">Cancel</button>
+                <button type="button" class="btn btn-primary px-4" disabled="@IsBusy" @onclick="ConfirmAsync">
+                    @(IsBusy ? "Booking..." : "Confirm Booking")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private string _purpose = string.Empty;
+    private int _durationHours = 1;
+    private string? _localError;
+    private bool _wasVisible;
+
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public string SpaceName { get; set; } = string.Empty;
+    [Parameter] public DateTime StartUtc { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+    [Parameter] public EventCallback<(string Purpose, int DurationHours)> OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private int MaxHours
+    {
+        get
+        {
+            var localStartHour = StartUtc.ToLocalTime().Hour;
+            var remainingUntilClose = 22 - localStartHour;
+            return Math.Clamp(remainingUntilClose, 1, 4);
+        }
+    }
+
+    private DateTime ComputedEndUtc => StartUtc.AddHours(_durationHours);
+
+    protected override void OnParametersSet()
+    {
+        if (Visible && !_wasVisible)
+        {
+            _purpose = string.Empty;
+            _durationHours = 1;
+            _localError = null;
+        }
+        _wasVisible = Visible;
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_purpose))
+        {
+            _localError = "Please enter the purpose of your booking.";
+            return;
+        }
+        _localError = null;
+        await OnConfirm.InvokeAsync((_purpose.Trim(), _durationHours));
+    }
+}

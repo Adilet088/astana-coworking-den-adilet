@@ -1,0 +1,55 @@
+﻿@implements IDisposable
+@inject DemoAuthService Auth
+
+<header class="app-header">
+    <div class="app-header-inner">
+        <a class="brand d-flex align-items-center gap-2" href="">
+            <span class="rb-nav-logo">RB</span>
+            <span>Room &amp; Coworking Booking</span>
+        </a>
+
+        @if (Auth.CurrentUser is { } user)
+        {
+            <nav class="app-nav">
+                <NavLink class="nav-item-link" href="" Match="NavLinkMatch.All">Spaces</NavLink>
+                <NavLink class="nav-item-link" href="my-bookings">My Bookings</NavLink>
+                @if (Auth.IsAdmin)
+                {
+                    <NavLink class="nav-item-link" href="admin">Admin Panel</NavLink>
+                }
+            </nav>
+
+            <div class="user-area">
+                <div class="user-info">
+                    <span class="rb-avatar rb-avatar-@user.Role.ToString().ToLowerInvariant()">
+                        @GetInitials(user.FullName)
+                    </span>
+                    <span class="user-name">@user.FullName</span>
+                    <span class="badge role-badge role-@user.Role.ToString().ToLowerInvariant()">@user.Role</span>
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="HandleSignOutAsync">
+                    Sign Out
+                </button>
+            </div>
+        }
+    </div>
+</header>
+
+@code {
+    private static string GetInitials(string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(fullName)) return "U";
+        var parts = fullName.Replace(".", " ").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{char.ToUpperInvariant(parts[0][0])}{char.ToUpperInvariant(parts[1][0])}"
+            : $"{char.ToUpperInvariant(parts[0][0])}";
+    }
+
+    protected override void OnInitialized() => Auth.OnUserChanged += HandleUserChanged;
+
+    private void HandleUserChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private Task HandleSignOutAsync() => Auth.SignOutAsync();
+
+    public void Dispose() => Auth.OnUserChanged -= HandleUserChanged;
+}

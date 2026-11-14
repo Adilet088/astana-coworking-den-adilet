@@ -1,0 +1,62 @@
+@using RoomBooking.Application.DTOs
+@using RoomBooking.Domain.Enums
+
+<div class="slot-grid">
+    @for (var hour = StartHour; hour < EndHour; hour++)
+    {
+        var slotStartUtc = ToUtc(hour);
+        var slotEndUtc = ToUtc(hour + 1);
+        var state = GetState(slotStartUtc, slotEndUtc);
+        <button type="button"
+                class="slot slot-@state.ToString().ToLowerInvariant()"
+                disabled="@(state != SlotState.Free)"
+                @onclick="() => OnSlotSelected.InvokeAsync(slotStartUtc)">
+            @($"{hour:00}:00") – @($"{hour + 1:00}:00")
+            <small>@StateText(state)</small>
+        </button>
+    }
+</div>
+
+<div class="slot-legend small mt-2">
+    <span class="slot slot-free">Available</span>
+    <span class="slot slot-busy">Booked</span>
+    <span class="slot slot-mine">My booking</span>
+</div>
+
+@code {
+    private const int StartHour = 8;
+    private const int EndHour = 22;
+
+    private enum SlotState { Free, Busy, Mine, Past }
+
+    [Parameter, EditorRequired] public DateOnly Date { get; set; }
+    [Parameter] public IReadOnlyList<BookingDto> Bookings { get; set; } = Array.Empty<BookingDto>();
+    [Parameter] public Guid CurrentUserId { get; set; }
+    [Parameter] public EventCallback<DateTime> OnSlotSelected { get; set; }
+
+    private DateTime ToUtc(int hour)
+    {
+        var local = Date.ToDateTime(TimeOnly.MinValue).AddHours(hour);
+        return DateTime.SpecifyKind(local, DateTimeKind.Local).ToUniversalTime();
+    }
+
+    private SlotState GetState(DateTime startUtc, DateTime endUtc)
+    {
+        var booking = Bookings.FirstOrDefault(b =>
+            b.Status != BookingStatus.Cancelled &&
+            b.StartTimeUtc < endUtc && b.EndTimeUtc > startUtc);
+
+        if (booking is not null)
+            return booking.UserId == CurrentUserId ? SlotState.Mine : SlotState.Busy;
+
+        return startUtc < DateTime.UtcNow ? SlotState.Past : SlotState.Free;
+    }
+
+    private static string StateText(SlotState s) => s switch
+    {
+        SlotState.Free => "Available",
+        SlotState.Busy => "Booked",
+        SlotState.Mine => "My booking",
+        _ => "Past"
+    };
+}

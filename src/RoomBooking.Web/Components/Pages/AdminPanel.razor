@@ -1,0 +1,636 @@
+@page "/admin"
+@using System.Globalization
+@implements IDisposable
+@inject ISpaceService SpaceService
+@inject IBookingService BookingService
+@inject DemoAuthService Auth
+
+<PageTitle>Admin Panel</PageTitle>
+
+@if (!Auth.IsAdmin)
+{
+    <div class="alert alert-danger">
+        <h5 class="alert-heading mb-1">Access Denied</h5>
+        <p class="mb-0">This page is available to administrators only.</p>
+    </div>
+}
+else
+{
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h3 class="fw-bold mb-0">Admin Panel</h3>
+            <span class="text-muted small">Analytics, space management, and reservation moderation</span>
+        </div>
+        <button type="button" class="btn btn-primary px-3" @onclick="OpenCreateModal">
+            + Add New Space
+        </button>
+    </div>
+
+    @if (!string.IsNullOrEmpty(_error))
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-xl-3">
+            <div class="rb-kpi-card">
+                <div class="rb-kpi-label">Bookings Today</div>
+                <div class="rb-kpi-value">@_todayBookingsCount</div>
+                <div class="rb-kpi-sub">@_totalConfirmedCount active in 30d window</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="rb-kpi-card">
+                <div class="rb-kpi-label">Most Popular Space</div>
+                <div class="rb-kpi-value text-truncate" title="@_popularSpaceName">@_popularSpaceName</div>
+                <div class="rb-kpi-sub">@_popularSpaceBookings reservations</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="rb-kpi-card">
+                <div class="rb-kpi-label">Peak Hour</div>
+                <div class="rb-kpi-value">@_peakHourLabel</div>
+                <div class="rb-kpi-sub">Highest demand time slot</div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <div class="rb-kpi-card">
+                <div class="rb-kpi-label">Cancellation Rate</div>
+                <div class="rb-kpi-value">@_cancellationRate.ToString("0.#", CultureInfo.InvariantCulture)%</div>
+                <div class="rb-kpi-sub">@_cancelledCount cancelled total</div>
+            </div>
+        </div>
+    </div>
+
+    <h5 class="fw-bold mt-4 mb-3">Spaces Management (@_spaces.Count)</h5>
+    @if (_loading)
+    {
+        <p class="text-muted">Loading...</p>
+    }
+    else
+    {
+        <div class="table-wrap mb-4">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Location</th>
+                        <th>Category</th>
+                        <th>Access</th>
+                        <th>Roles</th>
+                        <th>Capacity</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in _spaces)
+                    {
+                        <tr @key="s.Id" class="@(s.IsActive ? null : "row-muted")">
+                            <td class="fw-semibold">@s.Name</td>
+                            <td>@CleanLocation(s.Location)</td>
+                            <td>@FormatCategory(s.Category)</td>
+                            <td>
+                                <span class="rb-pill @GetAccessClass(s.Location)">@GetAccessLabel(s.Location)</span>
+                            </td>
+                            <td>
+                                <span class="small text-muted">@FormatRoles(s.AllowedRoles)</span>
+                            </td>
+                            <td>@s.Capacity</td>
+                            <td>
+                                <span class="badge @(s.IsActive ? "status-confirmed" : "status-cancelled")">
+                                    @(s.IsActive ? "Active" : "Inactive")
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm @(s.IsActive ? "btn-outline-danger" : "btn-outline-success")"
+                                        disabled="@(_busyId == s.Id)"
+                                        @onclick="() => ToggleAsync(s)">
+                                    @(s.IsActive ? "Deactivate" : "Activate")
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <h5 class="fw-bold mb-3">Booking Schedule &amp; Moderation</h5>
+    <div class="row g-2 mb-3">
+        <div class="col-md-5">
+            <label class="form-label small fw-semibold text-secondary">Space</label>
+            <select class="form-select" value="@(_scheduleSpaceId?.ToString() ?? "")" @onchange="OnScheduleSpaceChanged">
+                <option value="">All Spaces (7-day overview)</option>
+                @foreach (var s in _spaces)
+                {
+                    <option value="@s.Id">@s.Name</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold text-secondary">From date (7 days)</label>
+            <input type="date" class="form-control"
+                   value="@_scheduleFrom.ToString("yyyy-MM-dd")"
+                   @onchange="OnScheduleDateChanged" />
+        </div>
+    </div>
+
+    @if (_schedule.Count == 0)
+    {
+        <div class="alert alert-info">No bookings found in the selected period.</div>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Space</th>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Purpose</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var b in _schedule)
+                    {
+                        <tr @key="b.Id" class="@(b.Status == BookingStatus.Cancelled ? "row-muted" : null)">
+                            <td class="fw-semibold">@b.SpaceName</td>
+                            <td>@b.StartTimeUtc.ToLocalTime().ToString("ddd, dd MMM yyyy", CultureInfo.InvariantCulture)</td>
+                            <td>@b.StartTimeUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture) – @b.EndTimeUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)</td>
+                            <td>@b.UserName</td>
+                            <td>@b.Purpose</td>
+                            <td><span class="badge status-@b.Status.ToString().ToLowerInvariant()">@b.Status</span></td>
+                            <td class="text-end">
+                                @if (b.Status == BookingStatus.Confirmed && b.EndTimeUtc > DateTime.UtcNow)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            disabled="@(_cancellingId == b.Id)"
+                                            @onclick="() => AdminCancelBookingAsync(b.Id)">
+                                        @(_cancellingId == b.Id ? "Cancelling..." : "Cancel")
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    @if (_createModalOpen)
+    {
+        <div class="rb-modal-overlay" @onclick="CloseCreateModal">
+            <div class="rb-modal-dialog" style="max-width: 560px;" @onclick:stopPropagation>
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h5 class="fw-bold m-0 rb-modal-title">Add New Workspace</h5>
+                        <div class="text-muted small">Create a new campus room or Astana coworking hub</div>
+                    </div>
+                    <button type="button" class="btn-close" aria-label="Close" disabled="@_creatingSpace" @onclick="CloseCreateModal"></button>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold text-secondary">Space Name</label>
+                        <input class="form-control" maxlength="100" placeholder="e.g., Astana Hub — Event Hall or Room C1.3.105"
+                               @bind="_newName" disabled="@_creatingSpace" />
+                    </div>
+
+                    <div class="col-md-7">
+                        <label class="form-label small fw-semibold text-secondary">Street / Building Address</label>
+                        <input class="form-control" maxlength="150" placeholder="e.g., 55/8 Mangilik El Ave"
+                               @bind="_newAddress" disabled="@_creatingSpace" />
+                    </div>
+
+                    <div class="col-md-5">
+                        <label class="form-label small fw-semibold text-secondary">Zone</label>
+                        <select class="form-select" @bind="_newZone" disabled="@_creatingSpace">
+                            <option value="Astana">Astana City Hub</option>
+                            <option value="Campus">University Campus</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-secondary">Category</label>
+                        <select class="form-select" @bind="_newCategory" disabled="@_creatingSpace">
+                            <option value="@SpaceCategory.CoworkingOpenSpace">Coworking Open Space</option>
+                            <option value="@SpaceCategory.MeetingRoom">Meeting Room</option>
+                            <option value="@SpaceCategory.ComputerLab">Computer Lab</option>
+                            <option value="@SpaceCategory.LectureHall">Lecture Hall</option>
+                            <option value="@SpaceCategory.SilentPod">Silent Pod</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-secondary">Access Tariff</label>
+                        <select class="form-select" @bind="_newTariff" disabled="@_creatingSpace">
+                            <option value="[Free]">Free</option>
+                            <option value="[Paid]">Paid</option>
+                            <option value="[Free / Paid]">Residents / Paid</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-secondary">Capacity (seats)</label>
+                        <input type="number" min="1" max="1000" class="form-control"
+                               @bind="_newCapacity" disabled="@_creatingSpace" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold text-secondary">Description</label>
+                        <input class="form-control" maxlength="250" placeholder="Brief description of conditions and rules..."
+                               @bind="_newDescription" disabled="@_creatingSpace" />
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label small fw-semibold text-secondary d-block mb-1">Allowed Roles</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <label class="form-check-label small">
+                                <input type="checkbox" class="form-check-input me-1" @bind="_allowStudent" disabled="@_creatingSpace" />
+                                Student
+                            </label>
+                            <label class="form-check-label small">
+                                <input type="checkbox" class="form-check-input me-1" @bind="_allowTeacher" disabled="@_creatingSpace" />
+                                Teacher
+                            </label>
+                            <label class="form-check-label small text-muted">
+                                <input type="checkbox" class="form-check-input me-1" checked disabled />
+                                Admin (always)
+                            </label>
+                        </div>
+                    </div>
+
+                    @if (_equipmentCatalog.Count > 0)
+                    {
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold text-secondary d-block mb-1">Available Equipment</label>
+                            <div class="d-flex flex-wrap gap-2">
+                                @foreach (var eq in _equipmentCatalog)
+                                {
+                                    var selected = _newSelectedEquipment.Contains(eq);
+                                    <button type="button"
+                                            class="rb-eq-filter-chip @(selected ? "active" : null)"
+                                            disabled="@_creatingSpace"
+                                            @onclick="() => ToggleNewEquipment(eq)">
+                                        @(selected ? "✓ " : "+ ")@eq
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrEmpty(_createError))
+                {
+                    <div class="auth-alert auth-alert-danger mt-3">@_createError</div>
+                }
+
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <button type="button" class="btn btn-light px-3" disabled="@_creatingSpace" @onclick="CloseCreateModal">Cancel</button>
+                    <button type="button" class="btn btn-primary px-4" disabled="@_creatingSpace" @onclick="CreateSpaceAsync">
+                        @(_creatingSpace ? "Creating..." : "Create Workspace")
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@if (!string.IsNullOrEmpty(_toastMessage))
+{
+    <div class="rb-toast" role="status">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@_toastMessage</span>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<SpaceDto> _spaces = Array.Empty<SpaceDto>();
+    private IReadOnlyList<BookingDto> _schedule = Array.Empty<BookingDto>();
+    private IReadOnlyList<string> _equipmentCatalog = Array.Empty<string>();
+    private Guid? _scheduleSpaceId;
+    private DateOnly _scheduleFrom = DateOnly.FromDateTime(DateTime.Today);
+    private bool _loading = true;
+    private Guid? _busyId;
+    private Guid? _cancellingId;
+    private string? _error;
+
+    // Dashboard KPI fields
+    private int _todayBookingsCount;
+    private int _totalConfirmedCount;
+    private int _cancelledCount;
+    private double _cancellationRate;
+    private string _popularSpaceName = "—";
+    private int _popularSpaceBookings;
+    private string _peakHourLabel = "—";
+
+    // Create Space Modal fields
+    private bool _createModalOpen;
+    private bool _creatingSpace;
+    private string? _createError;
+    private string _newName = string.Empty;
+    private string _newAddress = string.Empty;
+    private string _newZone = "Astana";
+    private SpaceCategory _newCategory = SpaceCategory.CoworkingOpenSpace;
+    private string _newTariff = "[Free]";
+    private int _newCapacity = 25;
+    private string _newDescription = string.Empty;
+    private bool _allowStudent = true;
+    private bool _allowTeacher = true;
+    private readonly HashSet<string> _newSelectedEquipment = new(StringComparer.OrdinalIgnoreCase);
+
+    private string? _toastMessage;
+    private CancellationTokenSource? _toastCts;
+
+    private static string CleanLocation(string loc) => loc
+        .Replace("[Free]", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("[Paid]", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("[Free / Paid]", "", StringComparison.OrdinalIgnoreCase)
+        .Trim();
+
+    private static string GetAccessLabel(string loc) =>
+        loc.Contains("[Free / Paid]", StringComparison.OrdinalIgnoreCase) ? "Residents / Paid" :
+        loc.Contains("[Paid]", StringComparison.OrdinalIgnoreCase) ? "Paid" : "Free";
+
+    private static string GetAccessClass(string loc) =>
+        loc.Contains("[Free / Paid]", StringComparison.OrdinalIgnoreCase) ? "rb-pill-hybrid" :
+        loc.Contains("[Paid]", StringComparison.OrdinalIgnoreCase) ? "rb-pill-paid" : "rb-pill-free";
+
+    private static string FormatCategory(SpaceCategory category) => category switch
+    {
+        SpaceCategory.LectureHall => "Lecture Hall",
+        SpaceCategory.ComputerLab => "Computer Lab",
+        SpaceCategory.CoworkingOpenSpace => "Coworking Open Space",
+        SpaceCategory.MeetingRoom => "Meeting Room",
+        SpaceCategory.SilentPod => "Silent Pod",
+        _ => category.ToString()
+    };
+
+    private static string FormatRoles(IReadOnlyList<UserRole> roles)
+    {
+        if (roles.Contains(UserRole.Student)) return "All Roles";
+        if (roles.Contains(UserRole.Teacher)) return "Staff & Teachers";
+        return "Admin Only";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.OnUserChanged += HandleUserChanged;
+        await LoadAsync();
+    }
+
+    private void HandleUserChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        if (!Auth.IsAdmin)
+        {
+            _spaces = Array.Empty<SpaceDto>();
+            _schedule = Array.Empty<BookingDto>();
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        var spacesResult = await SpaceService.GetAllForAdminAsync(Auth.CurrentUserId);
+        if (spacesResult.IsSuccess)
+        {
+            _spaces = spacesResult.Value!.OrderBy(s => s.Name).ToList();
+        }
+        else
+        {
+            _spaces = Array.Empty<SpaceDto>();
+            _error = spacesResult.Error?.Message;
+        }
+
+        var eqResult = await SpaceService.GetEquipmentCatalogAsync();
+        if (eqResult.IsSuccess)
+            _equipmentCatalog = eqResult.Value!;
+
+        await LoadAnalyticsAsync();
+        _loading = false;
+        await LoadScheduleAsync();
+    }
+
+    private async Task LoadAnalyticsAsync()
+    {
+        var fromUtc = DateTime.UtcNow.AddDays(-15);
+        var toUtc = DateTime.UtcNow.AddDays(30);
+        var allResult = await BookingService.GetAllBookingsForAdminAsync(Auth.CurrentUserId, fromUtc, toUtc);
+        if (!allResult.IsSuccess) return;
+
+        var all = allResult.Value!;
+        var todayLocal = DateOnly.FromDateTime(DateTime.Now);
+
+        var confirmed = all.Where(b => b.Status == BookingStatus.Confirmed).ToList();
+        _totalConfirmedCount = confirmed.Count;
+        _cancelledCount = all.Count(b => b.Status == BookingStatus.Cancelled);
+        _todayBookingsCount = confirmed.Count(b => DateOnly.FromDateTime(b.StartTimeUtc.ToLocalTime()) == todayLocal);
+        _cancellationRate = all.Count > 0 ? (_cancelledCount * 100.0 / all.Count) : 0;
+
+        var topSpace = confirmed
+            .GroupBy(b => b.SpaceName)
+            .OrderByDescending(g => g.Count())
+            .FirstOrDefault();
+
+        if (topSpace is not null)
+        {
+            _popularSpaceName = topSpace.Key;
+            _popularSpaceBookings = topSpace.Count();
+        }
+        else
+        {
+            _popularSpaceName = "No bookings yet";
+            _popularSpaceBookings = 0;
+        }
+
+        var peakGroup = confirmed
+            .GroupBy(b => b.StartTimeUtc.ToLocalTime().Hour)
+            .OrderByDescending(g => g.Count())
+            .FirstOrDefault();
+
+        _peakHourLabel = peakGroup is not null
+            ? $"{peakGroup.Key:D2}:00 – {peakGroup.Key + 1:D2}:00"
+            : "—";
+    }
+
+    private async Task LoadScheduleAsync()
+    {
+        if (!Auth.IsAdmin)
+        {
+            _schedule = Array.Empty<BookingDto>();
+            return;
+        }
+
+        var fromLocal = DateTime.SpecifyKind(_scheduleFrom.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
+        var fromUtc = fromLocal.ToUniversalTime();
+        var toUtc = fromLocal.AddDays(7).ToUniversalTime();
+
+        var result = await BookingService.GetAllBookingsForAdminAsync(Auth.CurrentUserId, fromUtc, toUtc);
+        if (result.IsSuccess)
+        {
+            _schedule = result.Value!
+                .Where(b => _scheduleSpaceId is null || b.SpaceId == _scheduleSpaceId.Value)
+                .OrderBy(b => b.StartTimeUtc)
+                .ToList();
+        }
+        else
+        {
+            _schedule = Array.Empty<BookingDto>();
+            _error = result.Error?.Message;
+        }
+    }
+
+    private async Task ToggleAsync(SpaceDto space)
+    {
+        _busyId = space.Id;
+        _error = null;
+        var result = await SpaceService.SetActiveAsync(Auth.CurrentUserId, space.Id, !space.IsActive);
+        if (result.IsSuccess)
+            _ = ShowToastAsync($"{space.Name} {(space.IsActive ? "deactivated" : "activated")}");
+        else
+            _error = result.Error?.Message ?? "Failed to update the space.";
+        _busyId = null;
+        await LoadAsync();
+    }
+
+    private async Task AdminCancelBookingAsync(Guid bookingId)
+    {
+        _cancellingId = bookingId;
+        _error = null;
+        var result = await BookingService.CancelAsync(Auth.CurrentUserId, bookingId);
+        if (result.IsSuccess)
+            _ = ShowToastAsync("Booking cancelled by administrator");
+        else
+            _error = result.Error?.Message ?? "Failed to cancel booking.";
+        _cancellingId = null;
+        await LoadAsync();
+    }
+
+    private void OpenCreateModal()
+    {
+        _newName = string.Empty;
+        _newAddress = string.Empty;
+        _newZone = "Astana";
+        _newCategory = SpaceCategory.CoworkingOpenSpace;
+        _newTariff = "[Free]";
+        _newCapacity = 25;
+        _newDescription = string.Empty;
+        _allowStudent = true;
+        _allowTeacher = true;
+        _newSelectedEquipment.Clear();
+        _createError = null;
+        _createModalOpen = true;
+    }
+
+    private void CloseCreateModal()
+    {
+        _createModalOpen = false;
+        _createError = null;
+    }
+
+    private void ToggleNewEquipment(string eq)
+    {
+        if (!_newSelectedEquipment.Remove(eq))
+            _newSelectedEquipment.Add(eq);
+    }
+
+    private async Task CreateSpaceAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newName) || string.IsNullOrWhiteSpace(_newAddress))
+        {
+            _createError = "Please enter both space name and address.";
+            return;
+        }
+
+        _creatingSpace = true;
+        _createError = null;
+
+        var roles = new List<UserRole> { UserRole.Admin };
+        if (_allowStudent) roles.Add(UserRole.Student);
+        if (_allowTeacher) roles.Add(UserRole.Teacher);
+
+        var formattedLocation = _newZone == "Campus"
+            ? $"Campus, {_newAddress.Trim()} {_newTariff}"
+            : $"{_newAddress.Trim()}, Astana {_newTariff}";
+
+        var request = new CreateSpaceRequest
+        {
+            Name = _newName.Trim(),
+            Location = formattedLocation,
+            Category = _newCategory,
+            Capacity = _newCapacity,
+            Description = _newDescription.Trim(),
+            Equipment = _newSelectedEquipment.ToList(),
+            AllowedRoles = roles
+        };
+
+        var result = await SpaceService.CreateAsync(Auth.CurrentUserId, request);
+        _creatingSpace = false;
+
+        if (result.IsSuccess)
+        {
+            _createModalOpen = false;
+            _ = ShowToastAsync($"Created workspace \"{result.Value!.Name}\"");
+            await LoadAsync();
+        }
+        else
+        {
+            _createError = result.Error?.Message ?? "Failed to create space.";
+        }
+    }
+
+    private async Task OnScheduleSpaceChanged(ChangeEventArgs e)
+    {
+        _scheduleSpaceId = Guid.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await LoadScheduleAsync();
+    }
+
+    private async Task OnScheduleDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+        {
+            _scheduleFrom = date;
+            await LoadScheduleAsync();
+        }
+    }
+
+    private async Task ShowToastAsync(string message)
+    {
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+
+        _toastMessage = message;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(3500, token);
+            _toastMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        Auth.OnUserChanged -= HandleUserChanged;
+    }
+}

@@ -1,0 +1,737 @@
+/* wwwroot/app.css */
+:root {
+    --c-bg: #f6f7f9;
+    --c-surface: #ffffff;
+    --c-border: #e3e6ea;
+    --c-text: #1f2937;
+    --c-muted: #6b7280;
+    --c-primary: #2563eb;
+    --c-primary-dark: #1d4ed8;
+    --c-free: #198754;
+    --c-free-dark: #157347;
+    --c-busy: #6c757d;
+    --c-mine: #2563eb;
+    --c-past: #adb5bd;
+    --radius: .5rem;
+    --shadow: 0 1px 3px rgba(16, 24, 40, .08);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--c-bg);
+    color: var(--c-text);
+}
+
+h1:focus { outline: none; }
+
+/* ---------- Layout ---------- */
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+.app-main { width: 100%; max-width: 1200px; margin: 0 auto; padding: 1.5rem 1rem 3rem; flex: 1; }
+
+.app-header {
+    background: var(--c-surface);
+    border-bottom: 1px solid var(--c-border);
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+.app-header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: .6rem 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .75rem 1.5rem;
+}
+.brand { font-weight: 700; font-size: 1.05rem; color: var(--c-text); text-decoration: none; }
+.app-nav { display: flex; gap: .25rem; flex: 1; flex-wrap: wrap; }
+.nav-item-link {
+    padding: .4rem .75rem;
+    border-radius: var(--radius);
+    color: var(--c-muted);
+    text-decoration: none;
+    font-weight: 500;
+}
+.nav-item-link:hover { background: var(--c-bg); color: var(--c-text); }
+.nav-item-link.active { background: #e8efff; color: var(--c-primary-dark); }
+
+.user-area { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.user-info { display: flex; align-items: center; gap: .5rem; }
+.user-name { font-weight: 600; font-size: .95rem; }
+.role-badge { font-weight: 500; }
+.role-student { background: #0dcaf0; color: #052c33; }
+.role-teacher { background: #ffc107; color: #3d2f00; }
+.role-admin { background: #dc3545; color: #fff; }
+
+.user-switcher {
+    display: inline-flex;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.switch-btn {
+    border: 0;
+    background: var(--c-surface);
+    padding: .3rem .7rem;
+    font-size: .85rem;
+    cursor: pointer;
+    color: var(--c-muted);
+}
+.switch-btn + .switch-btn { border-left: 1px solid var(--c-border); }
+.switch-btn:hover { background: var(--c-bg); }
+.switch-btn.active { background: var(--c-primary); color: #fff; }
+
+/* ---------- Space cards ---------- */
+.space-card {
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    cursor: pointer;
+    background: var(--c-surface);
+    box-shadow: var(--shadow);
+    height: 100%;
+    transition: border-color .15s, box-shadow .15s;
+}
+.space-card:hover { border-color: var(--c-primary); }
+.space-card.selected { border-color: var(--c-primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .2); }
+.space-card.inactive { opacity: .6; }
+.space-card-header { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.space-card-header h5 { margin: 0; font-size: 1.05rem; }
+
+/* ---------- Time slots ---------- */
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: .5rem; }
+.slot {
+    display: flex;
+    flex-direction: column;
+    padding: .55rem;
+    border-radius: .375rem;
+    border: 0;
+    color: #fff;
+    text-align: center;
+    font-size: .9rem;
+}
+.slot small { opacity: .85; }
+.slot-free { background: var(--c-free); cursor: pointer; }
+.slot-free:hover { background: var(--c-free-dark); }
+.slot-busy { background: var(--c-busy); cursor: not-allowed; }
+.slot-mine { background: var(--c-mine); cursor: not-allowed; }
+.slot-past { background: var(--c-past); cursor: not-allowed; }
+.slot:disabled { opacity: 1; }
+.slot-legend { display: flex; gap: .5rem; flex-wrap: wrap; }
+.slot-legend .slot { display: inline-block; padding: .15rem .6rem; }
+
+/* ---------- Modal ---------- */
+.modal-backdrop-custom {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 1050;
+}
+.modal-dialog-custom { width: 100%; max-width: 440px; border: 0; border-radius: var(--radius); }
+
+/* ---------- Tables ---------- */
+.table-wrap {
+    background: var(--c-surface);
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+}
+.table-wrap .table { margin-bottom: 0; }
+.table-wrap th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--c-muted); white-space: nowrap; }
+.row-muted td { color: var(--c-muted); }
+
+.badge.status-confirmed { background: #d1e7dd; color: #0f5132; }
+.badge.status-cancelled { background: #e9ecef; color: #495057; }
+.badge.status-completed { background: #cfe2ff; color: #084298; }
+
+/* ---------- Forms ---------- */
+.form-label { font-size: .85rem; font-weight: 600; color: var(--c-muted); margin-bottom: .25rem; }
+
+/* ---------- Error UI ---------- */
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    inset: auto 0 0 0;
+    background: #fff3cd;
+    color: #664d03;
+    padding: .6rem 1.25rem;
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, .15);
+    z-index: 2000;
+}
+#blazor-error-ui .dismiss { cursor: pointer; position: absolute; right: .75rem; top: .5rem; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+    .app-header-inner { flex-direction: column; align-items: stretch; }
+    .app-nav { justify-content: center; }
+    .user-area { justify-content: space-between; }
+    .app-main { padding: 1rem .75rem 2rem; }
+    .slot-grid { grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); }
+}
+/* Auth & Login Page */
+.session-loader {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.auth-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 430px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.auth-brand {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.auth-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: #2563eb;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.auth-brand h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem;
+    color: #0f172a;
+}
+
+.auth-brand p {
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+.auth-field {
+    margin-bottom: 1rem;
+}
+
+.auth-label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #2563eb;
+    font-size: 0.825rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.link-btn:hover {
+    text-decoration: underline;
+}
+
+.auth-submit {
+    margin-top: 0.5rem;
+    padding: 0.6rem;
+    font-weight: 600;
+}
+
+.auth-alert {
+    padding: 0.65rem 0.85rem;
+    border-radius: 10px;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.auth-alert-danger {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.auth-alert-success {
+    background: #f0fdf4;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.auth-divider {
+    position: relative;
+    text-align: center;
+    margin: 1.4rem 0 1rem;
+}
+
+.auth-divider::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 1px;
+    background: #e2e8f0;
+}
+
+.auth-divider span {
+    position: relative;
+    background: #ffffff;
+    padding: 0 0.75rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+}
+
+.demo-fill-grid {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.demo-fill-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-size: 0.82rem;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.demo-fill-btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
+}
+
+.demo-fill-btn span {
+    color: #64748b;
+    font-size: 0.78rem;
+}
+/* ---------- Password Toggle & Reset Modal ---------- */
+.password-input-wrapper {
+    position: relative;
+}
+
+.password-input {
+    padding-right: 2.6rem;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: none;
+    background: transparent;
+    color: #64748b;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: color 0.15s ease;
+}
+
+.password-toggle-btn:hover {
+    color: #0f172a;
+}
+
+.rb-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    z-index: 9999;
+}
+
+.rb-modal-dialog {
+    background: #ffffff;
+    width: 100%;
+    max-width: 420px;
+    border-radius: 16px;
+    padding: 1.75rem;
+    box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.28);
+    border: 1px solid #e2e8f0;
+    animation: modalScaleIn 0.18s ease-out;
+}
+
+.rb-modal-title {
+    color: #0f172a;
+}
+
+@keyframes modalScaleIn {
+    from {
+        transform: scale(0.95);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+/* ---------- Hero Banner & Filters ---------- */
+.rb-hero {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    color: #ffffff;
+    padding: 1.75rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px -8px rgba(30, 58, 138, 0.35);
+}
+
+.rb-hero-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+.rb-stat-box {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 12px;
+    padding: 0.75rem 1.25rem;
+    text-align: center;
+    min-width: 110px;
+}
+
+.rb-stat-num {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.rb-stat-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.75);
+    margin-top: 0.2rem;
+}
+
+.rb-filter-bar,
+.rb-schedule-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
+}
+
+/* ---------- Upgraded Space Cards ---------- */
+.rb-space-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.rb-space-card:hover {
+    transform: translateY(-3px);
+    border-color: #93c5fd;
+    box-shadow: 0 12px 24px -8px rgba(15, 23, 42, 0.1);
+}
+
+.rb-space-card.selected {
+    border: 2px solid #2563eb;
+    background: #f8faff;
+    box-shadow: 0 10px 24px -6px rgba(37, 99, 235, 0.18);
+}
+
+.rb-space-card.inactive {
+    opacity: 0.65;
+}
+
+.rb-space-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a;
+    line-height: 1.3;
+}
+
+.rb-loc-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.6rem;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.rb-loc-astana {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.rb-loc-campus {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.rb-pill {
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+}
+
+.rb-pill-cat {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.rb-pill-cap {
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+.rb-pill-free {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.rb-pill-hybrid {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.rb-pill-paid {
+    background: #f3e8ff;
+    color: #6b21a8;
+}
+
+.rb-pill-inactive {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.rb-space-location {
+    font-size: 0.84rem;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+}
+
+.rb-pin-icon {
+    margin-right: 4px;
+    flex-shrink: 0;
+}
+
+.rb-equip-tag {
+    font-size: 0.73rem;
+    font-weight: 500;
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+}
+/* ---------- Booking Modal Time Pill ---------- */
+.rb-booking-time-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 0.4rem 0.75rem;
+    border-radius: 8px;
+}
+/* ---------- Toast Notification ---------- */
+.rb-toast {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    background: #0f172a;
+    color: #ffffff;
+    border-left: 4px solid #22c55e;
+    padding: 0.85rem 1.25rem;
+    border-radius: 12px;
+    box-shadow: 0 16px 32px -8px rgba(15, 23, 42, 0.35);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 10000;
+    animation: toastSlideUp 0.22s ease-out;
+}
+
+.rb-toast svg {
+    color: #22c55e;
+    flex-shrink: 0;
+}
+
+@keyframes toastSlideUp {
+    from {
+        transform: translateY(16px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+/* ---------- Empty State Card ---------- */
+.rb-empty-state {
+    background: #ffffff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 16px;
+    padding: 3rem 1.5rem;
+    text-align: center;
+    max-width: 480px;
+    margin: 2rem auto;
+}
+
+.rb-empty-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: #eff6ff;
+    color: #2563eb;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+/* ---------- Brand Logo & User Avatar ---------- */
+.rb-nav-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.rb-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+}
+
+.rb-avatar-student {
+    background: #cffafe;
+    color: #0e7490;
+}
+
+.rb-avatar-teacher {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.rb-avatar-admin {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+/* ---------- Equipment Filter Chips & Admin Stats ---------- */
+.rb-eq-filter-chip {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.78rem;
+    font-weight: 500;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.rb-eq-filter-chip:hover {
+    border-color: #93c5fd;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.rb-eq-filter-chip.active {
+    border-color: #2563eb;
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.rb-kpi-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1.15rem 1.25rem;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.rb-kpi-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.rb-kpi-value {
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 0.25rem;
+    line-height: 1.2;
+}
+
+.rb-kpi-sub {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-top: 0.25rem;
+}

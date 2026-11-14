@@ -1,0 +1,192 @@
+@page "/my-bookings"
+@using System.Globalization
+@implements IDisposable
+@inject IBookingService BookingService
+@inject DemoAuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>My Bookings</PageTitle>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+        <h3 class="fw-bold mb-0">My Bookings</h3>
+        <span class="text-muted small">Manage your upcoming and past workspace reservations</span>
+    </div>
+    @if (_bookings.Count > 0)
+    {
+        <button type="button" class="btn btn-primary btn-sm px-3" @onclick="GoToSpaces">
+            + New Booking
+        </button>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+@if (_loading)
+{
+    <div class="text-center py-5 text-muted">Loading bookings...</div>
+}
+else if (_bookings.Count == 0)
+{
+    <div class="rb-empty-state">
+        <div class="rb-empty-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        </div>
+        <h5 class="fw-bold mb-1">No reservations yet</h5>
+        <p class="text-muted small mb-3">
+            You haven't booked any campus rooms or Astana coworking spaces yet.
+        </p>
+        <button type="button" class="btn btn-primary px-4" @onclick="GoToSpaces">
+            Browse Spaces
+        </button>
+    </div>
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Space</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Purpose</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var b in _bookings)
+                {
+                    <tr @key="b.Id" class="@(b.Status == BookingStatus.Cancelled ? "row-muted" : null)">
+                        <td class="fw-semibold">@b.SpaceName</td>
+                        <td>@b.StartTimeUtc.ToLocalTime().ToString("ddd, dd MMM yyyy", CultureInfo.InvariantCulture)</td>
+                        <td>@b.StartTimeUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture) – @b.EndTimeUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture)</td>
+                        <td>@b.Purpose</td>
+                        <td><span class="badge status-@b.Status.ToString().ToLowerInvariant()">@b.Status</span></td>
+                        <td class="text-end">
+                            @if (b.Status == BookingStatus.Confirmed && b.EndTimeUtc > DateTime.UtcNow)
+                            {
+                                <button class="btn btn-sm btn-outline-danger"
+                                        disabled="@(_busyId == b.Id)"
+                                        @onclick="() => CancelAsync(b.Id)">
+                                    @(_busyId == b.Id ? "Cancelling..." : "Cancel")
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(_toastMessage))
+{
+    <div class="rb-toast" role="status">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@_toastMessage</span>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<BookingDto> _bookings = Array.Empty<BookingDto>();
+    private bool _loading = true;
+    private string? _error;
+    private Guid? _busyId;
+
+    private string? _toastMessage;
+    private CancellationTokenSource? _toastCts;
+
+    private void GoToSpaces() => Nav.NavigateTo("/");
+
+    protected override async Task OnInitializedAsync()
+    {
+        Auth.OnUserChanged += HandleUserChanged;
+        await LoadAsync();
+    }
+
+    private void HandleUserChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadAsync()
+    {
+        if (!Auth.IsAuthenticated)
+        {
+            _bookings = Array.Empty<BookingDto>();
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        var result = await BookingService.GetMyBookingsAsync(Auth.CurrentUserId);
+        if (result.IsSuccess)
+        {
+            _bookings = result.Value!.OrderByDescending(b => b.StartTimeUtc).ToList();
+        }
+        else
+        {
+            _bookings = Array.Empty<BookingDto>();
+            _error = result.Error?.Message;
+        }
+        _loading = false;
+    }
+
+    private async Task CancelAsync(Guid bookingId)
+    {
+        _busyId = bookingId;
+        _error = null;
+        var result = await BookingService.CancelAsync(Auth.CurrentUserId, bookingId);
+        if (result.IsSuccess)
+        {
+            _ = ShowToastAsync("Booking cancelled");
+        }
+        else
+        {
+            _error = result.Error?.Message ?? "Failed to cancel the booking.";
+        }
+        _busyId = null;
+        await LoadAsync();
+    }
+
+    private async Task ShowToastAsync(string message)
+    {
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+
+        _toastMessage = message;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(3000, token);
+            _toastMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        Auth.OnUserChanged -= HandleUserChanged;
+    }
+}

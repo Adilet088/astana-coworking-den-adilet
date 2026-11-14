@@ -1,0 +1,407 @@
+﻿@page "/"
+@using System.Globalization
+@implements IDisposable
+@inject ISpaceService SpaceService
+@inject IBookingService BookingService
+@inject BookingStateContainer State
+@inject DemoAuthService Auth
+@inject BookingHubClient HubClient
+
+<PageTitle>Room &amp; Coworking Booking</PageTitle>
+
+<div class="rb-hero mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <span class="rb-hero-badge">Astana Campus &amp; Partner Hubs</span>
+            <h2 class="fw-bold mt-2 mb-1">Find and book your ideal workspace</h2>
+            <p class="mb-0 text-white-50">Real-time room availability across university labs and verified coworking hubs in Astana.</p>
+        </div>
+        <div class="d-flex gap-3">
+            <div class="rb-stat-box">
+                <div class="rb-stat-num">@_spaces.Count</div>
+                <div class="rb-stat-label">Total Spaces</div>
+            </div>
+            <div class="rb-stat-box">
+                <div class="rb-stat-num">@_spaces.Count(s => s.IsActive)</div>
+                <div class="rb-stat-label">Available Now</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="rb-filter-bar mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold text-secondary mb-1">Date</label>
+            <input type="date" class="form-control"
+                   value="@State.SelectedDate.ToString("yyyy-MM-dd")"
+                   @onchange="OnDateChanged" />
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold text-secondary mb-1">Location</label>
+            <select class="form-select" value="@State.Location" @onchange="OnLocationChanged">
+                <option value="@LocationFilter.All">All Locations</option>
+                <option value="@LocationFilter.Campus">University Campus</option>
+                <option value="@LocationFilter.Astana">Astana City Hubs</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-semibold text-secondary mb-1">Category</label>
+            <select class="form-select" value="@(State.Category?.ToString() ?? "")" @onchange="OnCategoryChanged">
+                <option value="">All Categories</option>
+                <option value="@SpaceCategory.LectureHall">Lecture Hall</option>
+                <option value="@SpaceCategory.ComputerLab">Computer Lab</option>
+                <option value="@SpaceCategory.CoworkingOpenSpace">Coworking Open Space</option>
+                <option value="@SpaceCategory.MeetingRoom">Meeting Room</option>
+                <option value="@SpaceCategory.SilentPod">Silent Pod</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold text-secondary mb-1">Access Tariff</label>
+            <select class="form-select" @bind="_accessFilter">
+                <option value="all">All Tariffs</option>
+                <option value="free">Free Only</option>
+                <option value="paid">Paid / Hybrid</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small fw-semibold text-secondary mb-1">Min Capacity</label>
+            <input type="number" min="0" class="form-control" value="@State.MinCapacity"
+                   @onchange="OnMinCapacityChanged" />
+        </div>
+        <div class="col-md-1">
+            <button class="btn btn-outline-secondary w-100" @onclick="ResetAllFilters">Reset</button>
+        </div>
+    </div>
+
+    @if (_allEquipment.Count > 0)
+    {
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+            <span class="small fw-semibold text-secondary me-1">Equipment:</span>
+            @foreach (var eq in _allEquipment)
+            {
+                var isChecked = _selectedEquipment.Contains(eq);
+                <button type="button"
+                        class="rb-eq-filter-chip @(isChecked ? "active" : null)"
+                        @onclick="() => ToggleEquipmentFilter(eq)">
+                    @(isChecked ? "✓ " : "+ ")@eq
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@if (!string.IsNullOrEmpty(_pageError))
+{
+    <div class="alert alert-danger">@_pageError</div>
+}
+
+@if (_loading)
+{
+    <div class="text-center py-5 text-muted">Loading spaces...</div>
+}
+else
+{
+    var filtered = _spaces.Where(MatchesAllFilters).ToList();
+
+    @if (filtered.Count == 0)
+    {
+        <div class="alert alert-info">No spaces match the selected filters.</div>
+    }
+    else
+    {
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3 mb-4">
+            @foreach (var space in filtered)
+            {
+                <div class="col" @key="space.Id">
+                    <SpaceCard Space="space" IsSelected="_selected?.Id == space.Id" OnSelected="SelectSpaceAsync" />
+                </div>
+            }
+        </div>
+    }
+
+    @if (_selected is not null)
+    {
+        <div class="rb-schedule-panel mt-4">
+            <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                <div>
+                    <h4 class="fw-bold mb-0">@_selected.Name</h4>
+                    <span class="text-muted small">
+                        @CleanLocation(_selected.Location) · @State.SelectedDate.ToString("dddd, dd MMM yyyy", CultureInfo.InvariantCulture)
+                    </span>
+                </div>
+                <span class="badge bg-primary-subtle text-primary px-3 py-2">Click an available time slot to book</span>
+            </div>
+
+            @if (!_selected.IsActive)
+            {
+                <div class="alert alert-warning">This space is currently inactive and cannot be booked.</div>
+            }
+
+            <TimeSlotGrid Date="State.SelectedDate"
+                          Bookings="SelectedSpaceBookings"
+                          CurrentUserId="Auth.CurrentUserId"
+                          OnSlotSelected="OpenModal" />
+        </div>
+    }
+}
+
+<BookingModal Visible="@_modalOpen"
+              SpaceName="@(_selected?.Name ?? string.Empty)"
+              StartUtc="@_slotStartUtc"
+              Error="@_modalError"
+              IsBusy="@_busy"
+              OnConfirm="ConfirmBookingAsync"
+              OnCancel="CloseModal" />
+
+@if (!string.IsNullOrEmpty(_toastMessage))
+{
+    <div class="rb-toast" role="status">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span>@_toastMessage</span>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<SpaceDto> _spaces = Array.Empty<SpaceDto>();
+    private List<string> _allEquipment = new();
+    private readonly HashSet<string> _selectedEquipment = new(StringComparer.OrdinalIgnoreCase);
+    private string _accessFilter = "all";
+
+    private SpaceDto? _selected;
+    private bool _loading = true;
+    private string? _pageError;
+
+    private bool _modalOpen;
+    private bool _busy;
+    private string? _modalError;
+    private DateTime _slotStartUtc;
+
+    private string? _toastMessage;
+    private CancellationTokenSource? _toastCts;
+
+    private IReadOnlyList<BookingDto> SelectedSpaceBookings =>
+        _selected is null
+            ? Array.Empty<BookingDto>()
+            : State.Bookings.Where(b => b.SpaceId == _selected.Id).ToList();
+
+    private static string CleanLocation(string loc) => loc
+        .Replace("[Free]", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("[Paid]", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("[Free / Paid]", "", StringComparison.OrdinalIgnoreCase)
+        .Trim();
+
+    private bool MatchesAllFilters(SpaceDto space)
+    {
+        if (!State.Matches(space)) return false;
+
+        if (_accessFilter == "free" && !space.Location.Contains("[Free]", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (_accessFilter == "paid" &&
+            !space.Location.Contains("[Paid]", StringComparison.OrdinalIgnoreCase) &&
+            !space.Location.Contains("[Free / Paid]", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (_selectedEquipment.Count > 0 &&
+            !_selectedEquipment.All(req => space.Equipment.Contains(req, StringComparer.OrdinalIgnoreCase)))
+            return false;
+
+        return true;
+    }
+
+    private void ToggleEquipmentFilter(string eq)
+    {
+        if (!_selectedEquipment.Remove(eq))
+            _selectedEquipment.Add(eq);
+    }
+
+    private void ResetAllFilters()
+    {
+        State.ResetFilters();
+        _accessFilter = "all";
+        _selectedEquipment.Clear();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        State.OnChange += HandleStateChanged;
+        Auth.OnUserChanged += HandleUserChanged;
+        await LoadSpacesAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try { await HubClient.StartAsync(); }
+        catch (Exception ex) { _pageError = $"Real-time updates unavailable: {ex.Message}"; StateHasChanged(); }
+    }
+
+    private void HandleStateChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private void HandleUserChanged() => _ = InvokeAsync(async () =>
+    {
+        CloseModal();
+        await LoadSpacesAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadSpacesAsync()
+    {
+        if (!Auth.IsAuthenticated)
+        {
+            _spaces = Array.Empty<SpaceDto>();
+            _selected = null;
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _pageError = null;
+        var result = await SpaceService.GetAccessibleAsync(Auth.CurrentUserId);
+        if (result.IsSuccess)
+        {
+            _spaces = result.Value!;
+            _allEquipment = _spaces
+                .SelectMany(s => s.Equipment)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(e => e)
+                .ToList();
+            _selected = _selected is null ? null : _spaces.FirstOrDefault(s => s.Id == _selected.Id);
+        }
+        else
+        {
+            _spaces = Array.Empty<SpaceDto>();
+            _selected = null;
+            _pageError = result.Error?.Message;
+        }
+        _loading = false;
+        await LoadScheduleAsync();
+    }
+
+    private async Task LoadScheduleAsync()
+    {
+        if (_selected is null || !Auth.IsAuthenticated)
+        {
+            State.SetBookings(Array.Empty<BookingDto>());
+            return;
+        }
+
+        var fromLocal = DateTime.SpecifyKind(State.SelectedDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
+        var result = await BookingService.GetScheduleAsync(
+            Auth.CurrentUserId, _selected.Id, fromLocal.ToUniversalTime(), fromLocal.AddDays(1).ToUniversalTime());
+
+        if (result.IsSuccess) State.SetBookings(result.Value!);
+        else _pageError = result.Error?.Message;
+    }
+
+    private async Task SelectSpaceAsync(SpaceDto space)
+    {
+        _selected = space;
+        await LoadScheduleAsync();
+    }
+
+    private async Task OnDateChanged(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+        {
+            State.SetDate(date);
+            await LoadScheduleAsync();
+        }
+    }
+
+    private void OnLocationChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<LocationFilter>(e.Value?.ToString(), out var loc)) State.SetLocation(loc);
+    }
+
+    private void OnCategoryChanged(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        State.SetCategory(Enum.TryParse<SpaceCategory>(raw, out var cat) ? cat : null);
+    }
+
+    private void OnMinCapacityChanged(ChangeEventArgs e)
+    {
+        State.SetMinCapacity(int.TryParse(e.Value?.ToString(), out var n) && n > 0 ? n : 0);
+    }
+
+    private Task OpenModal(DateTime startUtc)
+    {
+        if (_selected is null || !_selected.IsActive) return Task.CompletedTask;
+        _slotStartUtc = startUtc;
+        _modalError = null;
+        _modalOpen = true;
+        return Task.CompletedTask;
+    }
+
+    private void CloseModal()
+    {
+        _modalOpen = false;
+        _modalError = null;
+        _busy = false;
+    }
+
+    private async Task ConfirmBookingAsync((string Purpose, int DurationHours) payload)
+    {
+        if (_selected is null) return;
+        _busy = true;
+        _modalError = null;
+
+        var bookedSpace = _selected.Name;
+        var startStr = _slotStartUtc.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+        var endStr = _slotStartUtc.AddHours(payload.DurationHours).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+
+        var request = new CreateBookingRequest
+        {
+            SpaceId = _selected.Id,
+            StartTimeUtc = _slotStartUtc,
+            EndTimeUtc = _slotStartUtc.AddHours(payload.DurationHours),
+            Purpose = payload.Purpose
+        };
+
+        var result = await BookingService.CreateAsync(Auth.CurrentUserId, request);
+        _busy = false;
+
+        if (result.IsSuccess)
+        {
+            _modalOpen = false;
+            await LoadScheduleAsync();
+            _ = ShowToastAsync($"Booked {bookedSpace} ({startStr} – {endStr})");
+        }
+        else
+        {
+            _modalError = result.Error?.Message ?? "Booking failed.";
+        }
+    }
+
+    private async Task ShowToastAsync(string message)
+    {
+        _toastCts?.Cancel();
+        _toastCts = new CancellationTokenSource();
+        var token = _toastCts.Token;
+
+        _toastMessage = message;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await Task.Delay(3500, token);
+            _toastMessage = null;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (TaskCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        _toastCts?.Cancel();
+        _toastCts?.Dispose();
+        State.OnChange -= HandleStateChanged;
+        Auth.OnUserChanged -= HandleUserChanged;
+    }
+}

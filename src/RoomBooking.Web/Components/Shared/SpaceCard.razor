@@ -1,0 +1,71 @@
+@using RoomBooking.Application.DTOs
+@using RoomBooking.Domain.Enums
+
+<div class="rb-space-card @(IsSelected ? "selected" : null) @(Space.IsActive ? null : "inactive")"
+     role="button" @onclick="() => OnSelected.InvokeAsync(Space)">
+    <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+        <h5 class="rb-space-title mb-0">@Space.Name</h5>
+        <span class="rb-loc-badge @LocationClass">@LocationLabel</span>
+    </div>
+
+    <div class="d-flex flex-wrap gap-1 mb-2">
+        <span class="rb-pill rb-pill-cat">@CategoryLabel</span>
+        <span class="rb-pill rb-pill-cap">Capacity: @Space.Capacity</span>
+        <span class="rb-pill @AccessBadgeClass">@AccessLabel</span>
+        @if (!Space.IsActive)
+        {
+            <span class="rb-pill rb-pill-inactive">Inactive</span>
+        }
+    </div>
+
+    <div class="rb-space-location mb-3">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="rb-pin-icon">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+        </svg>
+        @CleanLocation
+    </div>
+
+    <div class="d-flex flex-wrap gap-1 mt-auto">
+        @foreach (var item in Space.Equipment)
+        {
+            <span class="rb-equip-tag">@item</span>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public SpaceDto Space { get; set; } = default!;
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public EventCallback<SpaceDto> OnSelected { get; set; }
+
+    private bool IsAstana => Space.Location.Contains("Astana", StringComparison.OrdinalIgnoreCase);
+    private string LocationLabel => IsAstana ? "Astana" : "Campus";
+    private string LocationClass => IsAstana ? "rb-loc-astana" : "rb-loc-campus";
+
+    private string CleanLocation => Space.Location
+        .Replace("[Free]", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("[Paid]", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("[Free / Paid]", "", StringComparison.OrdinalIgnoreCase)
+        .Trim();
+
+    private string AccessLabel =>
+        Space.Location.Contains("[Free / Paid]", StringComparison.OrdinalIgnoreCase) ? "Free for Residents / Paid" :
+        Space.Location.Contains("[Paid]", StringComparison.OrdinalIgnoreCase) ? "Paid" :
+        "Free";
+
+    private string AccessBadgeClass =>
+        Space.Location.Contains("[Free / Paid]", StringComparison.OrdinalIgnoreCase) ? "rb-pill-hybrid" :
+        Space.Location.Contains("[Paid]", StringComparison.OrdinalIgnoreCase) ? "rb-pill-paid" :
+        "rb-pill-free";
+
+    private string CategoryLabel => Space.Category switch
+    {
+        SpaceCategory.LectureHall => "Lecture Hall",
+        SpaceCategory.ComputerLab => "Computer Lab",
+        SpaceCategory.CoworkingOpenSpace => "Coworking Open Space",
+        SpaceCategory.MeetingRoom => "Meeting Room",
+        SpaceCategory.SilentPod => "Silent Pod",
+        _ => Space.Category.ToString()
+    };
+}
